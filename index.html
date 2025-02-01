@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VSC - Virtual Song Creator</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Google Sign-In -->
+  <script src="https://apis.google.com/js/platform.js" async defer></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: black;
+      color: white;
+      text-align: center;
+    }
+    #user-content {
+      display: none;
+    }
+    #audio-preview {
+      display: none;
+      margin-top: 20px;
+    }
+    #tempo-value {
+      margin-left: 10px;
+    }
+    #music-controls {
+      margin-top: 30px;
+    }
+    .btn {
+      background-color: #333;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .btn:disabled {
+      background-color: gray;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Google Sign-In Button -->
+  <div id="g-signin2"></div>
+
+  <!-- User Info Display After Sign In -->
+  <div id="user-content">
+    <h1>Welcome to VSC - Virtual Song Creator</h1>
+
+    <div id="record-controls">
+      <button id="record-btn" class="btn" onclick="startRecording()">Start Recording</button>
+      <button id="stop-btn" class="btn" onclick="stopRecording()" disabled>Stop Recording</button>
+    </div>
+
+    <div id="audio-controls" style="margin-top: 20px;">
+      <audio id="audio-preview" controls></audio>
+      <button id="play-btn" class="btn" onclick="playRecording()" disabled>Play</button>
+      <button id="save-btn" class="btn" onclick="saveSongToBackend()" disabled>Save Song</button>
+    </div>
+
+    <!-- Music Generation Controls -->
+    <div id="music-controls">
+      <label for="tempo">Tempo:</label>
+      <input type="range" id="tempo" name="tempo" min="60" max="200" value="120">
+      <span id="tempo-value">120 BPM</span>
+
+      <label for="genre">Genre:</label>
+      <select id="genre">
+        <option value="pop">Pop</option>
+        <option value="rock">Rock</option>
+        <option value="jazz">Jazz</option>
+      </select>
+
+      <button id="generate-music-btn" class="btn">Generate Music</button>
+    </div>
+  </div>
+
+  <script>
+    // Google Sign-In function
+    function onSignIn(googleUser) {
+      const profile = googleUser.getBasicProfile();
+      console.log('Logged in as: ' + profile.getName());
+      document.getElementById('user-content').style.display = 'block';
+      document.getElementById('g-signin2').style.display = 'none';
+    }
+
+    // Recording Logic
+    let mediaRecorder;
+    let audioChunks = [];
+    let audioBlob;
+    let audioUrl;
+
+    // Start recording function
+    function startRecording() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function (stream) {
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = function (event) {
+            audioChunks.push(event.data);
+          };
+          mediaRecorder.onstop = function () {
+            audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            audioChunks = [];
+            audioUrl = URL.createObjectURL(audioBlob);
+            document.getElementById('audio-preview').src = audioUrl;
+            document.getElementById('audio-preview').style.display = 'block';
+            document.getElementById('play-btn').disabled = false;
+            document.getElementById('save-btn').disabled = false;
+          };
+          mediaRecorder.start();
+          document.getElementById('record-btn').disabled = true;
+          document.getElementById('stop-btn').disabled = false;
+          console.log("Recording started...");
+        })
+        .catch(function (err) {
+          alert("Error accessing microphone.");
+        });
+    }
+
+    // Stop recording function
+    function stopRecording() {
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+        document.getElementById('record-btn').disabled = false;
+        document.getElementById('stop-btn').disabled = true;
+        console.log("Recording stopped.");
+      }
+    }
+
+    // Play the recording
+    function playRecording() {
+      const audioPreview = document.getElementById('audio-preview');
+      if (audioPreview) {
+        audioPreview.play();
+      }
+    }
+
+    // Save song to backend
+    function saveSongToBackend() {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'generated_song.wav');
+
+      fetch('/upload', {
+        method: 'POST',
+        body: formData
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Server response:', data);
+          alert('Song uploaded successfully!');
+        })
+        .catch(error => {
+          console.error('Error uploading song:', error);
+          alert('Error uploading song. Please try again.');
+        });
+    }
+
+    // Update tempo value when the slider changes
+    document.getElementById('tempo').addEventListener('input', function (event) {
+      document.getElementById('tempo-value').textContent = event.target.value + ' BPM';
+    });
+
+    // Handle music generation
+    document.getElementById('generate-music-btn').addEventListener('click', function () {
+      const tempo = document.getElementById('tempo').value;
+      const genre = document.getElementById('genre').value;
+
+      fetch('/generate-music', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ tempo: tempo, genre: genre })
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Generated music:', data);
+          const audioUrl = URL.createObjectURL(data.audioBlob);
+          document.getElementById('audio-preview').src = audioUrl;
+          document.getElementById('audio-preview').style.display = 'block';
+        })
+        .catch(error => {
+          console.error('Error generating music:', error);
+        });
+    });
+  </script>
+
+</body>
+</html>
+
